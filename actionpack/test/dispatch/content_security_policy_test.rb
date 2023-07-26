@@ -338,8 +338,10 @@ class DefaultContentSecurityPolicyIntegrationTest < ActionDispatch::IntegrationT
   end
 
   APP = build_app(ROUTES) do |middleware|
+    middleware.use Rack::Lint
     middleware.use PolicyConfigMiddleware
     middleware.use ActionDispatch::ContentSecurityPolicy::Middleware
+    middleware.use Rack::Lint
   end
 
   def app
@@ -488,8 +490,10 @@ class ContentSecurityPolicyIntegrationTest < ActionDispatch::IntegrationTest
   end
 
   APP = build_app(ROUTES) do |middleware|
+    middleware.use Rack::Lint
     middleware.use PolicyConfigMiddleware
     middleware.use ActionDispatch::ContentSecurityPolicy::Middleware
+    middleware.use Rack::Lint
   end
 
   def app
@@ -604,8 +608,10 @@ class DisabledContentSecurityPolicyIntegrationTest < ActionDispatch::Integration
   end
 
   APP = build_app(ROUTES) do |middleware|
+    middleware.use Rack::Lint
     middleware.use PolicyConfigMiddleware
     middleware.use ActionDispatch::ContentSecurityPolicy::Middleware
+    middleware.use Rack::Lint
   end
 
   def app
@@ -660,8 +666,10 @@ class NonceDirectiveContentSecurityPolicyIntegrationTest < ActionDispatch::Integ
   end
 
   APP = build_app(ROUTES) do |middleware|
+    middleware.use Rack::Lint
     middleware.use PolicyConfigMiddleware
     middleware.use ActionDispatch::ContentSecurityPolicy::Middleware
+    middleware.use Rack::Lint
   end
 
   def app
@@ -732,8 +740,10 @@ class HelpersContentSecurityPolicyIntegrationTest < ActionDispatch::IntegrationT
   end
 
   APP = build_app(ROUTES) do |middleware|
+    middleware.use Rack::Lint
     middleware.use PolicyConfigMiddleware
     middleware.use ActionDispatch::ContentSecurityPolicy::Middleware
+    middleware.use Rack::Lint
   end
 
   def app
