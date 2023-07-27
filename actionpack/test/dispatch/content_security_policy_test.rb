@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "abstract_unit"
+require "debug"
 
 class ContentSecurityPolicyTest < ActiveSupport::TestCase
   def setup
@@ -300,6 +301,124 @@ class ContentSecurityPolicyTest < ActiveSupport::TestCase
 
     assert_match %r{\AUnexpected content security policy source:}, exception.message
   end
+end
+
+class ContentSecurityPolicyMiddlewareTest < ActiveSupport::TestCase
+  def test_rack_lint
+    app = proc { [200, {}, []] }
+    env = Rack::MockRequest.env_for("", {})
+
+    assert_nothing_raised do
+      Rack::Lint.new(
+        ActionDispatch::ContentSecurityPolicy::Middleware.new(
+          Rack::Lint.new(app)
+        )
+      ).call(env)
+    end
+  end
+
+  def test_rack_lint_with_csp_headers
+    csp = [
+      "default-src 'self' https: http:",
+      "child-src 'self'",
+      "connect-src 'self' https: http: wss: ws:",
+      "font-src 'self' https: http:",
+      "frame-src 'self'",
+      "img-src 'self' https: http: data:",
+      "manifest-src 'self'",
+      "media-src 'self'",
+      "object-src 'none'",
+      "script-src 'self' https: http: 'unsafe-inline'",
+      "style-src 'self' https: http: 'unsafe-inline'",
+      "worker-src 'self'",
+      "base-uri 'self'"
+    ].join("; ").freeze
+
+    app = proc { [200, { "content-security-policy" => csp }, []] }
+    env = Rack::MockRequest.env_for("", {})
+
+    _, headers, _ = ActionDispatch::ContentSecurityPolicy::Middleware.new(app).call(env)
+    assert_equal csp, headers["content-security-policy"]
+  end
+end
+
+class ExistingContentSecurityPolicyIntegrationTest < ActionDispatch::IntegrationTest
+  class PolicyController < ActionController::Base
+    def index
+      head :ok
+    end
+  end
+
+  ROUTES = ActionDispatch::Routing::RouteSet.new
+  ROUTES.draw do
+    scope module: "default_content_security_policy_integration_test" do
+      get "/", to: "policy#index"
+    end
+  end
+
+  POLICY = ActionDispatch::ContentSecurityPolicy.new do |p|
+    p.default_src -> { :self  }
+    p.script_src  -> { :https }
+  end
+
+  class PreExistingCSPMiddleware
+    def initialize(app)
+      @app = app
+    end
+
+    def call(env)
+      response = @app.call(env)
+      response[1] = { "content-security-policy" => "default-src 'self' https: http:" }
+      response
+    end
+  end
+
+  class PolicyConfigMiddleware
+    def initialize(app)
+      @app = app
+    end
+
+    def call(env)
+      env["action_dispatch.content_security_policy"] = POLICY
+      env["action_dispatch.content_security_policy_nonce_generator"] = proc { "iyhD0Yc0W+c=" }
+      env["action_dispatch.content_security_policy_report_only"] = false
+      env["action_dispatch.show_exceptions"] = :none
+
+      @app.call(env)
+    end
+  end
+
+  APP = build_app(ROUTES) do |middleware|
+    middleware.use Rack::Lint
+    middleware.use PolicyConfigMiddleware
+    middleware.use ActionDispatch::ContentSecurityPolicy::Middleware
+    middleware.use PreExistingCSPMiddleware
+    middleware.use Rack::Lint
+  end
+
+  def app
+    APP
+  end
+
+  def test_does_not_override_preexisting_content_security_policy
+    get "/"
+    assert_response :success
+    assert_policy "default-src 'self' https: http:"
+  end
+
+  private
+    def assert_policy(expected, report_only: false)
+      if report_only
+        expected_header = "Content-Security-Policy-Report-Only"
+        unexpected_header = "Content-Security-Policy"
+      else
+        expected_header = "Content-Security-Policy"
+        unexpected_header = "Content-Security-Policy-Report-Only"
+      end
+
+      assert_nil response.headers[unexpected_header]
+      assert_equal expected, response.headers[expected_header]
+    end
 end
 
 class DefaultContentSecurityPolicyIntegrationTest < ActionDispatch::IntegrationTest
